@@ -1,5 +1,5 @@
-$(document).ready(function() {
-	var canvas = $("#canvas"), ctx = canvas[0].getContext("2d"); 
+(function() {
+	var canvas = document.getElementById("canvas"), ctx = canvas.getContext("2d");
 	var robots = [], bullets = [];
 	
 	console.log = function(){};
@@ -373,5 +373,5 @@ $(document).ready(function() {
 //	BattleManager.init(ctx, ["js/test-robot1.js", "js/test-robot2.js", "js/test-robot1.js", "js/test-robot2.js","js/test-robot1.js", "js/test-robot2.js", "js/test-robot1.js", "js/test-robot2.js"]);
 	BattleManager.init(ctx, ["js/scan-bot.js", "js/scan-bot.js", "js/scan-bot.js", "js/scan-bot.js"]);
 	BattleManager.run();
-	
-});
+
+})();
