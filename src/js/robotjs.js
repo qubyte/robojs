@@ -330,16 +330,7 @@
 					ctx.fillRect(-3,-3,6,6);
 					battle_manager._ctx.restore();
 				}
-				
-				battle_manager._ctx.beginPath();
-				battle_manager._ctx.strokeStyle = "red";
-				battle_manager._ctx.moveTo(robot["x"]-40,robot["y"]);
-				battle_manager._ctx.lineTo(robot["x"]+40,robot["y"]);
-				battle_manager._ctx.moveTo(robot["x"],robot["y"]-40);
-				battle_manager._ctx.lineTo(robot["x"],robot["y"]+40);
-				battle_manager._ctx.stroke();
-				battle_manager._ctx.closePath();
-				
+
 				battle_manager._ctx.strokeText(robot["id"] + " (" + robot["health"] + ")", robot["x"]-20,robot["y"]+35);
 
 				battle_manager._ctx.fillStyle = "green";
