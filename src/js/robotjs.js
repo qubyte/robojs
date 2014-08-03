@@ -353,10 +353,22 @@
 			}
 		},
 	};
-	
-//	BattleManager.init(ctx, ["js/scan-bot.js"]);
-//	BattleManager.init(ctx, ["js/test-robot1.js", "js/test-robot2.js", "js/test-robot1.js", "js/test-robot2.js","js/test-robot1.js", "js/test-robot2.js", "js/test-robot1.js", "js/test-robot2.js"]);
-	BattleManager.init(ctx, ["js/scan-bot.js", "js/scan-bot.js", "js/scan-bot.js", "js/scan-bot.js"]);
+
+	BattleManager.init(ctx, [
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js",
+		"js/scan-bot.js"
+	]);
 	BattleManager.run();
 
 })();
