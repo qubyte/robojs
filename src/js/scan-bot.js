@@ -6,7 +6,7 @@ ScanBot = BaseRobot;
 ScanBot.run = function() {
 	var robot = this;
 	robot.shoot();
-	
+
 	robot.turn_turret_right(45);
 	robot.move_forward(Math.random()*400, {
 		DONE: function() {
@@ -16,7 +16,7 @@ ScanBot.run = function() {
 					robot.shoot();
 					robot._run();
 				}
-			}); 
+			});
 		},
 		ENEMY_COLLIDE: function() {
 			robot.shoot();
