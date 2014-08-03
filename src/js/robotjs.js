@@ -196,11 +196,7 @@
 
 							var new_x = robot["x"] + (event["distance"]>0?1:-1) * Math.cos(Utils.degree2radian(robot["direction"]));
 							var new_y = robot["y"] + (event["distance"]>0?1:-1) * Math.sin(Utils.degree2radian(robot["direction"]));
-							/*
-							var new_x = Math.round(robot["x"] + (event["distance"]>0?1:-1) * Math.cos(Utils.degree2radian(robot["direction"])));
-							var new_y = Math.round(robot["y"] + (event["distance"]>0?1:-1) * Math.sin(Utils.degree2radian(robot["direction"])));
-							*/
-							
+
 							var wall_collide = !Utils.is_point_in_square(
 								new_x, new_y,
 								2, 2,
