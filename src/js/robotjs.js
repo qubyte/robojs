@@ -305,10 +305,10 @@ $(document).ready(function() {
 			
 			function draw_robot(ctx, robot) {
 				var body = new Image(), turret = new Image(), radar = new Image();
-				body.src = "img/body.png";
-				turret.src = "img/turret.png";
-				radar.src = "img/radar.png";
-				
+				body.src = "img/robots/body.png";
+				turret.src = "img/robots/turret.png";
+				radar.src = "img/robots/radar.png";
+
 				ctx.drawImage(body, -18, -18, 36, 36);
 				ctx.rotate(Utils.degree2radian(robot["turret_direction"]));
 				ctx.drawImage(turret, -25, -10, 54, 20);
