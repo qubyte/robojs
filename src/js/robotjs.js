@@ -1,9 +1,7 @@
 (function() {
 	var canvas = document.getElementById("canvas"), ctx = canvas.getContext("2d");
 	var robots = [], bullets = [];
-	
-	console.log = function(){};
-	
+
 	// utility functions
 	var Utils = {
 		degree2radian: function(a) {
