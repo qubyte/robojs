@@ -1,4 +1,6 @@
 (function() {
+    'use strict';
+
     var canvas = document.getElementById("canvas"), ctx = canvas.getContext("2d");
     var robots = [], bullets = [];
 
@@ -24,49 +26,79 @@
         },
     };
 
-
     var ARENA_WIDTH = 800;
     var ARENA_HEIGHT = 400;
     var ROBOT_SPEED = 1;
     var BULLET_SPEED = 3;
+
+    function buildContestantPath(contestantName){
+        return '../src/contestants/' + contestantName + '/';
+    }
+
+    function createBaseRobot(battle_manager, id, src){
+        var robot;
+        var worker = new Worker(src);
+
+        robot = {
+            "id": id,
+            "x": parseInt((ARENA_WIDTH-150)*Math.random(), 10),
+            "y": parseInt((ARENA_HEIGHT-150)*Math.random(), 10),
+            "health": 50,
+            "direction": 40,
+            "turret_direction": 0,
+            "radar_direction": 0,
+            "bullet": null,
+            "events": []
+        };
+
+        robot.worker = worker;
+        worker.onmessage = (function(id) {
+            return function(e) {
+                battle_manager._receive(id, e.data);
+            };
+        })(id);
+
+        return robot;
+    }
+
+    function addRobotToBattleManager(battle_manager, robot){
+        battle_manager._robots[robot.id] = robot;
+        battle_manager._send(robot.id, {
+            "signal": "INFO",
+            "arena_height": ARENA_HEIGHT,
+            "arena_width": ARENA_WIDTH
+        });
+    }
+
+    function createRobots(battle_manager){
+        Robojs.contestants.forEach(function(contestantName){
+            var contestantPath = buildContestantPath(contestantName);
+            var contestant = createBaseRobot(battle_manager, contestantName, contestantPath + 'brain.js');
+
+            contestant.bodySrc = contestantPath + 'body.png';
+            contestant.radarSrc = contestantPath + 'radar.png';
+            contestant.turretSrc = contestantPath + 'turret.png';
+
+            addRobotToBattleManager(battle_manager, contestant);
+        });
+
+        Robojs.bots.forEach(function(botName, i){
+            var bot = createBaseRobot(battle_manager, botName + i, 'js/' + botName + '.js');
+
+            addRobotToBattleManager(battle_manager, bot);
+        });
+    }
 
     var BattleManager = {
         _robots: {},
         _explosions: [],
         _ctx: null,
 
-        init: function(ctx, workers) {
+        init: function(ctx) {
             var battle_manager = this;
             battle_manager._ctx = ctx;
 
-            for(var w=0; w<workers.length; w++) {
-                var robot_id = "robot-" + w;
-                var robot = {
-                    "id": robot_id,
-                    "x": parseInt((ARENA_WIDTH-150)*Math.random(), 10),
-                    "y": parseInt((ARENA_HEIGHT-150)*Math.random(), 10),
-                    "health": 50,
-                    "direction": 40,
-                    "turret_direction": 0,
-                    "radar_direction": 0,
-                    "bullet": null,
-                    "events": [],
-                    "worker": new Worker(workers[w])
-                };
-                robot["worker"].onmessage = (function(robot_id) {
-                    return function(e) {
-                        battle_manager._receive(robot_id, e.data);
-                    };
-                })(robot_id);
-
-                battle_manager._robots[robot_id] = robot;
-
-                battle_manager._send(robot_id, {
-                    "signal": "INFO",
-                    "arena_height": ARENA_HEIGHT,
-                    "arena_width": ARENA_WIDTH
-                });
-            }
+            createRobots(battle_manager);
         },
 
         _receive: function(robot_id, msg) {
@@ -299,9 +331,9 @@
 
             function draw_robot(ctx, robot) {
                 var body = new Image(), turret = new Image(), radar = new Image();
-                body.src = "img/robots/body.png";
-                turret.src = "img/robots/turret.png";
-                radar.src = "img/robots/radar.png";
+                body.src = robot.bodySrc || "img/robots/body.png";
+                turret.src = robot.turretSrc || "img/robots/turret.png";
+                radar.src = robot.radarSrc || "img/robots/radar.png";
 
                 ctx.drawImage(body, -18, -18, 36, 36);
                 ctx.rotate(Utils.degree2radian(robot["turret_direction"]));
@@ -354,21 +386,7 @@
         },
     };
 
-    BattleManager.init(ctx, [
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js",
-        "js/scan-bot.js"
-    ]);
+    BattleManager.init(ctx);
     BattleManager.run();
 
 })();
