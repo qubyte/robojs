@@ -6,10 +6,10 @@
     Robojs.contestants = [
         'testContestant'
     ];
+
     Robojs.bots = [
         'scan-bot',
         'scan-bot',
         'scan-bot'
     ];
-
 })();

@@ -1,57 +1,116 @@
-(function() {
+(function(Robojs) {
     'use strict';
 
-    var canvas = document.getElementById("canvas"), ctx = canvas.getContext("2d");
-    var robots = [], bullets = [];
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
+
+    var explosionFrames = (function () {
+        var frames = [];
+
+        for (var i = 1; i <= 17; i++) {
+            var explosionFrame = new Image();
+
+            explosionFrame.src = 'img/explosion/explosion1-' + i + '.png';
+
+            frames.push(explosionFrame);
+        }
+
+        return frames;
+    })();
 
     // utility functions
-    var Utils = {
-        degree2radian: function(a) {
-            return a * (Math.PI / 180);
-        },
-        distance: function(x1, y1, x2, y2) {
-            return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
-        },
-        is_point_in_square: function(x1,y1, x2, y2, width, height) {
-            return x1 >=x2 && x1 <= (x2 + width) && y1 >= y2 && y1 <= (y2 + height);
-        },
-    };
+    function degree2radian(deg) {
+        return deg * Math.PI / 180;
+    }
+
+    function distance(x1, y1, x2, y2) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+    }
+
+    function is_point_in_square(x1, y1, x2, y2, width, height) {
+        return x1 >=x2 && x1 <= (x2 + width) && y1 >= y2 && y1 <= (y2 + height);
+    }
 
     var ARENA_WIDTH = 800;
     var ARENA_HEIGHT = 400;
-    var ROBOT_SPEED = 1;
     var BULLET_SPEED = 3;
 
-    function shoot(evt, battleManager, robot) {
-        if (!robot.bullet) {
-            robot.bullet = {
+    function Robot(options) {
+        var robot = this;
+
+        this.id = options.id;
+        this.worker = new Worker(options.src);
+        this.x = parseInt((ARENA_WIDTH - 150) * Math.random(), 10);
+        this.y = parseInt((ARENA_HEIGHT - 150) * Math.random(), 10);
+        this.health = 50;
+        this.direction = 40;
+        this.turretDirection = 0;
+        this.radarDirection = 0;
+        this.events = [];
+
+        this.body = new Image();
+        this.body.src = options.bodySrc || 'img/robots/body.png';
+
+        this.radar = new Image();
+        this.radar.src = options.radarSrc || 'img/robots/turret.png';
+
+        this.turret = new Image();
+        this.turret.src = options.turretSrc || 'img/robots/radar.png';
+
+        this.worker.onmessage = function(e) {
+            robot.receive(e.data);
+        };
+    }
+
+    Robot.prototype.send = function (message) {
+        this.worker.postMessage(JSON.stringify(message));
+    };
+
+    Robot.prototype.receive = function (messageString) {
+        var message = JSON.parse(messageString);
+
+        console.log(this.id, messageString);
+
+        message.progress = 0;
+
+        this.events.unshift(message);
+    };
+
+    function shoot(evt, bullets, robot) {
+        var now = Date.now();
+
+        if (!robot.lastShot || now - robot.lastShot > 2500) {
+            bullets.push({
+                ownerId: robot.id,
                 x: robot.x,
                 y: robot.y,
-                direction: robot.direction + robot.turret_direction
-            };
+                direction: robot.direction + robot.turretDirection
+            });
+
+            robot.lastShot = now;
         }
 
-        battleManager._send(robot.id, {
+        robot.send({
             signal: 'UPDATE',
             x: robot.x,
             y: robot.y
         });
     }
 
-    function move(evt, battleManager, robot) {
+    function move(evt, bullets, robot, robots) {
         evt.progress += 1;
 
-        var new_x = robot.x + (evt.distance > 0 ? 1 : -1) * Math.cos(Utils.degree2radian(robot.direction));
-        var new_y = robot.y + (evt.distance > 0 ? 1 : -1) * Math.sin(Utils.degree2radian(robot.direction));
+        var new_x = robot.x + (evt.distance > 0 ? 1 : -1) * Math.cos(degree2radian(robot.direction));
+        var new_y = robot.y + (evt.distance > 0 ? 1 : -1) * Math.sin(degree2radian(robot.direction));
 
-        var wallCollide = !Utils.is_point_in_square(new_x, new_y, 2, 2, ARENA_WIDTH - 2, ARENA_HEIGHT - 2);
+        var inArena = is_point_in_square(new_x, new_y, 2, 2, ARENA_WIDTH - 2, ARENA_HEIGHT - 2);
 
-        if (wallCollide) {
-            console.log('wall', robot.direction, robot.x, new_x, wallCollide);
+        if (!inArena) {
+            console.log('wall', robot.direction, robot.x, new_x);
 
             robot.health -= 1;
 
-            battleManager._send(robot.id, {
+            robot.send({
                 signal: 'CALLBACK',
                 callback_id: evt.callback_id,
                 status: 'WALL_COLLIDE'
@@ -60,14 +119,14 @@
             return;
         }
 
-        for (var i = 0, len = battleManager._robots.length; i < len; i++) {
-            var enemy = battleManager._robots[i];
+        for (var i = 0, len = robots.length; i < len; i++) {
+            var enemy = robots[i];
 
             if (robot.id === enemy.id) {
                 continue;
             }
 
-            var hit = Utils.distance(new_x, new_y, enemy.x, enemy.y) < 25;
+            var hit = distance(new_x, new_y, enemy.x, enemy.y) < 25;
 
             if (!hit) {
                 continue;
@@ -76,7 +135,7 @@
             enemy.health -= 1;
             robot.health -= 1;
 
-            battleManager._send(robot.id, {
+            robot.send({
                 signal: 'CALLBACK',
                 callback_id: evt.callback_id,
                 status: 'ENEMY_COLLIDE'
@@ -89,7 +148,7 @@
         if (evt.progress > Math.abs(evt.distance)) {
             console.log('move-over', robot.id);
 
-            battleManager._send(robot.id, {
+            robot.send({
                 signal: 'CALLBACK',
                 callback_id: evt.callback_id,
                 status: 'DONE'
@@ -104,9 +163,9 @@
         return true;
     }
 
-    function rotate(evt, battleManager, robot) {
+    function rotate(evt, bullets, robot) {
         if (evt.progress === Math.abs(parseInt(evt.angle, 10))) {
-            battleManager._send(robot.id, {
+            robot.send({
                 signal: 'CALLBACK',
                 callback_id: evt.callback_id,
                 status: 'DONE'
@@ -121,9 +180,9 @@
         return true;
     }
 
-    function rotateTurret(evt, battleManager, robot) {
+    function rotateTurret(evt, bullets, robot) {
         if (evt.progress === Math.abs(evt.angle)) {
-            battleManager._send(robot.id, {
+            robot.send({
                 signal: 'CALLBACK',
                 callback_id: evt.callback_id
             });
@@ -131,296 +190,217 @@
             return;
         }
 
-        robot.turret_direction += (evt.angle > 0 ? 1 : -1);
+        robot.turretDirection += (evt.angle > 0 ? 1 : -1);
         evt.progress += 1;
 
         return true;
     }
 
-    function processSignal(evt, battle_manager, robot) {
+    function processSignal(evt, bullets, robot, robots) {
         var signal = evt.signal;
 
-        if (signal === 'SHOOT') {
-            shoot(evt, battle_manager, robot);
-            return;
-        }
+        switch (signal) {
+            case 'SHOOT':
+                return shoot(evt, bullets, robot);
 
-        if (signal === 'MOVE') {
-            return move(evt, battle_manager, robot);
-        }
+            case 'MOVE':
+                return move(evt, bullets, robot, robots);
 
-        if (signal === 'ROTATE') {
-            return rotate(evt, battle_manager, robot);
-        }
+            case 'ROTATE':
+                return rotate(evt, bullets, robot);
 
-        if (signal === 'ROTATE_TURRET') {
-            return rotateTurret(evt, battle_manager, robot);
+            case 'ROTATE_TURRET':
+                return rotateTurret(evt, bullets, robot);
         }
     }
 
-    function processBullet(battleManager, robot, robots) {
-        var bullet = robot.bullet;
+    function processBullet(explosions, bullet, robots) {
+        bullet.x += BULLET_SPEED * Math.cos(degree2radian(bullet.direction));
+        bullet.y += BULLET_SPEED * Math.sin(degree2radian(bullet.direction));
 
-        bullet.x += BULLET_SPEED * Math.cos(Utils.degree2radian(bullet.direction));
-        bullet.y += BULLET_SPEED * Math.sin(Utils.degree2radian(bullet.direction));
+        var inArena = is_point_in_square(bullet.x, bullet.y, 2, 2, ARENA_WIDTH - 2, ARENA_HEIGHT - 2);
 
-        var wallCollide = !Utils.is_point_in_square(bullet.x, bullet.y, 2, 2, ARENA_WIDTH - 2, ARENA_HEIGHT - 2);
-
-        if (wallCollide) {
-            robot.bullet = null;
-            return;
+        if (!inArena) {
+            return true;
         }
 
-        for (var j = 0, jlen = robots.length; j < jlen; j++) {
-            var enemy = robots[j];
+        for (var i = 0, ilen = robots.length; i < ilen; i++) {
+            var enemy = robots[i];
 
-            if (robot.id === enemy.id) {
+            if (bullet.ownerId === enemy.id) {
                 continue;
             }
 
-            var hit = Utils.distance(bullet.x, bullet.y, enemy.x, enemy.y) < 20;
+            var hit = distance(bullet.x, bullet.y, enemy.x, enemy.y) < 20;
 
             if (!hit) {
                 continue;
             }
 
-            console.log('Robot', robot.id, 'hit', enemy.id + '!');
+            console.log('Robot', bullet.ownerId, 'hit', enemy.id + '!');
 
             enemy.health -= 3;
 
-            battleManager._explosions.push({
+            explosions.push({
                 x: enemy.x,
                 y: enemy.y,
                 progress: 1
             });
 
-            robot.bullet = null;
-
-            break;
+            return true;
         }
     }
 
-    function buildContestantPath(contestantName){
-        return '../src/contestants/' + contestantName + '/';
-    }
+    function createRobots() {
+        var robots = [];
 
-    function createBaseRobot(battle_manager, id, src){
-        var robot;
-        var worker = new Worker(src);
+        Robojs.contestants.forEach(function(id){
+            var contestantPath = '../src/contestants/' + id + '/';
 
-        robot = {
-            "id": id,
-            "x": parseInt((ARENA_WIDTH-150)*Math.random(), 10),
-            "y": parseInt((ARENA_HEIGHT-150)*Math.random(), 10),
-            "health": 50,
-            "direction": 40,
-            "turret_direction": 0,
-            "radar_direction": 0,
-            "bullet": null,
-            "events": []
-        };
-
-        robot.worker = worker;
-        worker.onmessage = (function(id) {
-            return function(e) {
-                battle_manager._receive(id, e.data);
-            };
-        })(id);
-
-        return robot;
-    }
-
-    function addRobotToBattleManager(battle_manager, robot){
-        battle_manager._robots[robot.id] = robot;
-        battle_manager._send(robot.id, {
-            "signal": "INFO",
-            "arena_height": ARENA_HEIGHT,
-            "arena_width": ARENA_WIDTH
-        });
-    }
-
-    function createRobots(battle_manager){
-        Robojs.contestants.forEach(function(contestantName){
-            var contestantPath = buildContestantPath(contestantName);
-            var contestant = createBaseRobot(battle_manager, contestantName, contestantPath + 'brain.js');
-
-            contestant.bodySrc = contestantPath + 'body.png';
-            contestant.radarSrc = contestantPath + 'radar.png';
-            contestant.turretSrc = contestantPath + 'turret.png';
-
-            addRobotToBattleManager(battle_manager, contestant);
+            robots.push(new Robot({
+                id: id,
+                src: contestantPath + 'brain.js',
+                bodySrc: contestantPath + 'body.png',
+                radarSrc: contestantPath + 'radar.png',
+                turretSrc: contestantPath + 'turret.png'
+            }));
         });
 
         Robojs.bots.forEach(function(botName, i){
-            var bot = createBaseRobot(battle_manager, botName + i, 'js/' + botName + '.js');
-
-            addRobotToBattleManager(battle_manager, bot);
+            robots.push(new Robot({
+                id: botName + i,
+                src: 'js/' + botName + '.js'
+            }));
         });
+
+        return robots;
     }
 
-    var BattleManager = {
-        _robots: {},
-        _explosions: [],
-        _ctx: null,
+    function update(robots, bullets, explosions) {
+        var robot;
 
-        init: function(ctx) {
-            var battle_manager = this;
-            battle_manager._ctx = ctx;
+        // Looping backwards here to keep indices consistent when splicing dead robots out.
+        for (var i = robots.length - 1; i >= 0; i--) {
+            robot = robots[i];
 
-            createRobots(battle_manager);
-        },
-
-        _receive: function(robot_id, msg) {
-            var msg_obj = JSON.parse(msg);
-            var battle_manager = this;
-            var robot = battle_manager._robots[robot_id];
-
-            console.log(robot_id, msg);
-
-            switch(msg_obj["signal"]) {
-                default:
-                    msg_obj["progress"] = 0;
-                    robot.events.unshift(msg_obj);
-                    break;
+            if (robot.health > 0) {
+                continue;
             }
-        },
-        _send: function(robot_id, msg_obj) {
-            var battle_manager = this;
-            var msg = JSON.stringify(msg_obj);
-            battle_manager._robots[robot_id]["worker"].postMessage(msg);
-        },
-        _send_all: function(msg_obj) {
-            var battle_manager = this;
-            for(var r in battle_manager._robots) {
-                battle_manager._send(r, msg_obj);
-            }
-        },
 
-        run: function() {
-            var battle_manager = this;
-
-            setInterval(function() {
-                battle_manager._run();
-            }, 5);
-            battle_manager._send_all({
-                "signal": "RUN"
+            explosions.push({
+                x: robot.x,
+                y: robot.y,
+                progress: 1
             });
-        },
-        _run: function() {
-            var battle_manager = this;
 
-            battle_manager._update();
-            battle_manager._draw();
-        },
+            robots.splice(i, 1);
+        }
 
-        _update: function () {
-            var robotIds = Object.keys(this._robots || {});
-            var robots = [];
+        for (var j = bullets.length - 1; j >= 0; j--) {
+            var bullet = bullets[j];
 
-            Object.keys(this._robots || {}).forEach(function(id){
-                var robot = BattleManager._robots[id];
+            var spent = processBullet(explosions, bullet, robots);
 
-                if (robot.health > 0) {
-                    return robots.push(robot);
+            if (spent) {
+                bullets.splice(j, 1);
+            }
+        }
+
+        for (var k = 0, klen = robots.length; k < klen; k++) {
+            robot = robots[k];
+
+            var nextEvents = [];
+
+            for(var e = 0; e < robot.events.length; e++) {
+                var evt = robot.events[e];
+                var postponed = processSignal(evt, bullets, robot, robots);
+
+                if (postponed) {
+                    nextEvents.push(evt);
                 }
 
-                BattleManager._explosions.push({
+                robot.send({
+                    signal: 'update',
                     x: robot.x,
-                    y: robot.y,
-                    progress: 1
+                    y: robot.y
                 });
-
-                delete BattleManager._robots[id];
-            });
-
-            robots.forEach(function (robot) {
-                var nextEvents = [];
-
-                if (robot.bullet) {
-                    processBullet(BattleManager, robot, robots);
-                }
-
-                for(var e = 0; e < robot.events.length; e++) {
-                    var evt = robot.events.pop();
-                    var postponed = processSignal(evt, BattleManager, robot);
-
-                    if (postponed) {
-                        robot.events.unshift(evt);
-                    }
-
-                    BattleManager._send(robot.id, {
-                        signal: 'update',
-                        x: robot.x,
-                        y: robot.y
-                    });
-                }
-            });
-        },
-
-        _draw: function () {
-            var battle_manager = this;
-
-            battle_manager._ctx.clearRect(0, 0, 800, 400);
-
-
-            function draw_robot(ctx, robot) {
-                var body = new Image(), turret = new Image(), radar = new Image();
-                body.src = robot.bodySrc || "img/robots/body.png";
-                turret.src = robot.turretSrc || "img/robots/turret.png";
-                radar.src = robot.radarSrc || "img/robots/radar.png";
-
-                ctx.drawImage(body, -18, -18, 36, 36);
-                ctx.rotate(Utils.degree2radian(robot["turret_direction"]));
-                ctx.drawImage(turret, -25, -10, 54, 20);
-                robot["radar_direction"]++;
-                ctx.rotate(Utils.degree2radian(robot["radar_direction"]));
-                ctx.drawImage(radar, -8, -11, 16, 22);
             }
 
-            // draw robots
-            for(var r in battle_manager._robots) {
-                var robot = battle_manager._robots[r];
+            robot.events = nextEvents;
+        }
+    }
 
-                // draw robot
-                battle_manager._ctx.save();
-                battle_manager._ctx.translate(robot["x"],robot["y"]);
-                battle_manager._ctx.rotate(Utils.degree2radian(robot["direction"]));
-                draw_robot(battle_manager._ctx, robot);
-                battle_manager._ctx.restore();
+    function draw(robots, bullets, explosions, ctx) {
+        ctx.clearRect(0, 0, 800, 400);
 
-                // draw bullet
-                if(robot["bullet"]) {
-                    battle_manager._ctx.save();
-                    battle_manager._ctx.translate(robot["bullet"]["x"],robot["bullet"]["y"]);
-                    battle_manager._ctx.rotate(Utils.degree2radian(robot["bullet"]["direction"]));
-                    ctx.fillRect(-3,-3,6,6);
-                    battle_manager._ctx.restore();
-                }
+        function drawRobot(ctx, robot) {
+            ctx.drawImage(robot.body, -18, -18, 36, 36);
+            ctx.rotate(degree2radian(robot.turretDirection));
+            ctx.drawImage(robot.turret, -25, -10, 54, 20);
+            robot.radarDirection += 1;
+            ctx.rotate(degree2radian(robot.radarDirection));
+            ctx.drawImage(robot.radar, -8, -11, 16, 22);
+        }
 
-                battle_manager._ctx.strokeText(robot["id"] + " (" + robot["health"] + ")", robot["x"]-20,robot["y"]+35);
+        // draw robots
+        for (var i = 0, ilen = robots.length; i < ilen; i++) {
+            var robot = robots[i];
 
-                battle_manager._ctx.fillStyle = "green";
-                battle_manager._ctx.fillRect(robot["x"]-20,robot["y"]+35, robot["health"], 5);
-                battle_manager._ctx.fillStyle = "red";
-                battle_manager._ctx.fillRect(robot["x"]-20+robot["health"],robot["y"]+35, 25-robot["health"], 5);
-                battle_manager._ctx.fillStyle = "black";
+            // draw robot
+            ctx.save();
+            ctx.translate(robot.x,robot.y);
+            ctx.rotate(degree2radian(robot.direction));
+            drawRobot(ctx, robot);
+            ctx.restore();
 
+            ctx.strokeText(robot.id + ' (' + robot.health + ')', robot.x - 20, robot.y + 35);
+            ctx.fillStyle = 'green';
+            ctx.fillRect(robot.x - 20, robot.y + 35, robot.health, 5);
+            ctx.fillStyle = 'red';
+            ctx.fillRect(robot.x - 20 + robot.health, robot.y + 35, 25 - robot.health, 5);
+            ctx.fillStyle = 'black';
+        }
+
+        for (var j = 0, jlen = bullets.length; j < jlen; j++) {
+            var bullet = bullets[j];
+
+            ctx.save();
+            ctx.translate(bullet.x, bullet.y);
+            ctx.rotate(degree2radian(bullet.direction));
+            ctx.fillRect(-3, -3, 6, 6);
+            ctx.restore();
+        }
+
+        for (var k = explosions.length - 1; k >= 0; k--) {
+            var explosion = explosions[k];
+            var progress = explosion.progress;
+
+            if (progress > 17) {
+                explosions.splice(k, 1);
+                continue;
             }
-            for(var e=0; e<battle_manager._explosions.length; e++) {
-                var explosion = battle_manager._explosions.pop();
 
-                if(explosion["progress"]<=17) {
-                    var explosion_img = new Image();
-                    explosion_img.src = "img/explosion/explosion1-" + parseInt(explosion["progress"], 10)+'.png';
-                    battle_manager._ctx.drawImage(explosion_img, explosion["x"]-64, explosion["y"]-64, 128, 128);
-                    explosion["progress"]+= 0.1;
-                    battle_manager._explosions.unshift(explosion);
-                }
+            ctx.drawImage(explosionFrames[parseInt(progress, 10)], explosion.x - 64, explosion.y - 64, 128, 128);
+            explosion.progress += 0.1;
+        }
+    }
+
+    function BattleManager(context) {
+        var bullets = [];
+        var explosions = [];
+        var robots = createRobots(this);
+
+        this.run = function() {
+            setInterval(function() {
+                update(robots, bullets, explosions);
+                draw(robots, bullets, explosions, context);
+            }, 5);
+
+            for (var i = 0, len = robots.length; i < len; i++) {
+                robots[i].send({ 'signal': 'RUN' });
             }
-        },
-    };
+        };
+    }
 
-    BattleManager.init(ctx);
-    BattleManager.run();
-
-})();
+    new BattleManager(ctx).run();
+})(Robojs);
